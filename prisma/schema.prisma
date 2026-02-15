@@ -1,0 +1,523 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// User account and author profile.
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  name          String?
+  bio           String?
+  avatar        String?
+  image         String?
+  password      String?
+  role          UserRole  @default(FREE_USER)
+  premiumExpires DateTime?
+  stripeCustomerId String?
+  stripeSubscriptionId String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  accounts      Account[]
+  sessions      Session[]
+  articles      Article[]
+  comments      Comment[]
+  likes         Like[]
+  newsletter    NewsletterSubscription?
+  payments      Payment[]
+  courses       Course[]
+
+  @@map("users")
+}
+
+/// OAuth account connection (NextAuth).
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+/// Session record (NextAuth).
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+/// Verification token (NextAuth).
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+/// Category for organizing articles.
+model Category {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  color       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  articles Article[]
+
+  @@map("categories")
+}
+
+/// Tag for labeling articles.
+model Tag {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  articles ArticleTag[]
+
+  @@map("tags")
+}
+
+/// Article (primary content).
+model Article {
+  id          String      @id @default(cuid())
+  title       String
+  slug        String      @unique
+  excerpt     String?
+  content     String
+  published   Boolean     @default(false)
+  featured    Boolean     @default(false)
+  trending    Boolean     @default(false)
+  premium     Boolean     @default(false)
+  readTime    Int         @default(0)
+  views       Int         @default(0)
+  coverImage  String?
+  publishedAt DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Foreign keys
+  authorId   String
+  categoryId String?
+
+  // Relations
+  author    User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  category  Category?  @relation(fields: [categoryId], references: [id])
+  tags      ArticleTag[]
+  comments  Comment[]
+  likes     Like[]
+  seo       SEO?
+
+  @@map("articles")
+}
+
+/// Join table for the many-to-many relation between articles and tags.
+model ArticleTag {
+  id        String @id @default(cuid())
+  articleId String
+  tagId     String
+
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  tag     Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([articleId, tagId])
+  @@map("article_tags")
+}
+
+/// User comment on an article (supports replies).
+model Comment {
+  id        String   @id @default(cuid())
+  content   String
+  published Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Foreign keys
+  authorId  String
+  articleId String
+  parentId  String?
+
+  // Relations
+  author  User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  article Article   @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  parent  Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies Comment[] @relation("CommentReplies")
+
+  @@map("comments")
+}
+
+/// Like on an article (one per user per article).
+model Like {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  // Foreign keys
+  userId    String
+  articleId String
+
+  // Relations
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, articleId])
+  @@map("likes")
+}
+
+/// SEO metadata for an article.
+model SEO {
+  id          String   @id @default(cuid())
+  title       String?
+  description String?
+  keywords    String?
+  ogImage     String?
+  ogTitle     String?
+  ogDescription String?
+  twitterCard String?
+  twitterImage String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Foreign key
+  articleId String @unique
+
+  // Relations
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@map("seo")
+}
+
+/// Newsletter subscription.
+model NewsletterSubscription {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Optional user link (one subscription per user).
+  userId String? @unique
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id])
+
+  @@map("newsletter_subscriptions")
+}
+
+/// Payment records for subscriptions and one-time purchases.
+model Payment {
+  id         String   @id @default(cuid())
+  user       User     @relation(fields: [userId], references: [id])
+  userId     String
+  amount     Int
+  currency   String   @default("USD")
+  method     String   // Payment provider (e.g. "stripe", "telebirr").
+  phone      String?  // Telebirr phone number (if applicable).
+  status     String   // Payment status (e.g. "pending", "completed", "failed", "cancelled").
+  type       String   // Payment type (e.g. "subscription", "one_time", "donation").
+  stripePaymentIntentId String?
+  stripeSubscriptionId String?
+  telebirrOrderId String?
+  metadata   String?  // JSON string for provider-specific metadata.
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("payments")
+}
+
+/// Global site settings
+model Setting {
+  id        String   @id @default(cuid())
+  siteName  String   @default("My Blog")
+  tagline   String?
+  logo      String?
+  favicon   String?
+
+  defaultPostStatus String   @default("draft")
+  postsPerPage      Int      @default(10)
+  allowComments     Boolean  @default(true)
+
+  defaultMetaDescription String?
+  defaultMetaKeywords    String?
+  defaultOgImage         String?
+  twitterHandle          String?
+
+  themeMode      String   @default("system")
+  homepageLayout String   @default("list")
+
+  analyticsId   String?
+  smtpHost      String?
+  smtpPort      Int?
+  smtpUser      String?
+  smtpPassword  String?
+  senderEmail   String?
+
+  maintenanceMode Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("settings")
+}
+
+// Enums
+enum UserRole {
+  ADMIN
+  AUTHOR
+  MODERATOR
+  FREE_USER
+  PREMIUM_USER
+}
+
+/// Community sections configuration stored as JSON arrays.
+model CommunitySection {
+  id        String   @id @default(cuid())
+  key       String   @unique // Section key (e.g. "trendingTopics", "recentDiscussions", "upcomingEvents", "featuredMembers").
+  data      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("community_sections")
+}
+
+/// Help Center configuration stored as JSON arrays.
+model HelpSection {
+  id        String   @id @default(cuid())
+  key       String   @unique // Section key (e.g. "categories", "popularArticles", "videoTutorials").
+  data      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("help_sections")
+}
+
+/// Job posting.
+model Job {
+  id           String     @id @default(cuid())
+  title        String
+  company      String
+  companyLogo  String?
+  source       JobSource  @default(ABTECH)
+  location     String
+  type         JobType
+  description  String
+  applyUrl     String
+  contactEmail String?
+  tags         String?
+  featured     Boolean    @default(false)
+  active       Boolean    @default(true)
+  // Compensation & details
+  compensationType CompensationType?
+  salaryMin     Int?
+  salaryMax     Int?
+  currency      String? @default("USD")
+  remoteType    RemoteType?
+  experienceLevel ExperienceLevel?
+  allowSiteApply Boolean @default(true)
+  postedAt     DateTime   @default(now())
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  // Relations
+  applications JobApplication[]
+
+  @@map("jobs")
+}
+
+/// External job submission.
+model JobSubmission {
+  id           String            @id @default(cuid())
+  title        String
+  company      String
+  location     String
+  type         JobType
+  description  String
+  applyUrl     String
+  contactEmail String
+  tags         String?
+  // Optional compensation details from submitter
+  compensationType CompensationType?
+  salaryMin     Int?
+  salaryMax     Int?
+  currency      String?
+  remoteType    RemoteType?
+  experienceLevel ExperienceLevel?
+  status       SubmissionStatus  @default(PENDING)
+  submittedAt  DateTime          @default(now())
+  reviewedAt   DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@map("job_submissions")
+}
+
+enum JobSource {
+  ABTECH
+  EXTERNAL
+}
+
+enum JobType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERNSHIP
+  FREELANCE
+  TEMPORARY
+}
+
+enum SubmissionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum CompensationType {
+  SALARY
+  HOURLY
+  STIPEND
+  UNPAID
+}
+
+enum RemoteType {
+  REMOTE
+  ONSITE
+  HYBRID
+}
+
+enum ExperienceLevel {
+  INTERN
+  JUNIOR
+  MID
+  SENIOR
+  LEAD
+}
+
+/// Job application submitted by a user.
+model JobApplication {
+  id         String   @id @default(cuid())
+  jobId      String
+  name       String
+  email      String
+  phone      String?
+  linkedin   String?
+  portfolio  String?
+  resumeUrl  String?
+  coverLetter String?
+  status     ApplicationStatus @default(SUBMITTED)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@map("job_applications")
+}
+
+enum ApplicationStatus {
+  SUBMITTED
+  REVIEWED
+  REJECTED
+  HIRED
+}
+
+// =============================================
+// Course & Learning Content Models
+// =============================================
+
+/// A structured, multi-module course containing PDF or other assets.
+model Course {
+  id          String        @id @default(cuid())
+  title       String
+  slug        String        @unique
+  description String?
+  coverImage  String?
+  level       CourseLevel   @default(BEGINNER)
+  status      CourseStatus  @default(DRAFT)
+  published   Boolean       @default(false)
+  views       Int           @default(0)
+  // Optional author reference (reuse User if instructor system added later)
+  authorId    String?
+  author      User?         @relation(fields: [authorId], references: [id])
+  // Relations
+  modules     CourseModule[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@map("courses")
+}
+
+/// A module within a course, holds ordered learning assets.
+model CourseModule {
+  id          String        @id @default(cuid())
+  courseId    String
+  title       String
+  description String?
+  order       Int           @default(0)
+  assets      CourseAsset[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  course      Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@index([courseId, order])
+  @@map("course_modules")
+}
+
+/// An uploaded learning asset (e.g. PDF) linked to a module.
+model CourseAsset {
+  id          String      @id @default(cuid())
+  moduleId    String
+  title       String
+  publicId    String      // Cloudinary public ID
+  fileType    String      // mime type shorthand (e.g. 'pdf')
+  bytes       Int?        // size for display & analytics
+  pages       Int?        // page count for PDFs (optional)
+  order       Int         @default(0)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  module      CourseModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@index([moduleId, order])
+  @@map("course_assets")
+}
+
+enum CourseStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum CourseLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
