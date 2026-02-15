@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+
+# Next.js
+.next/
+out/
+
+# Build output
+dist/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Env files (never commit secrets)
+.env
+.env.*
+!.env.example
+
+# Prisma / local databases
+prisma/dev.db
+prisma/dev.db-journal
+db/*.db
+*.db
+*.db-journal
+
+# TypeScript
+*.tsbuildinfo
+
+# Testing / coverage
+coverage/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# Vercel
+.vercel/
+
+# Cursor/VSCode (optional)
+.vscode/
+
+
