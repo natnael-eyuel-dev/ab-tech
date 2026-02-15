@@ -112,7 +112,6 @@ export default function PdfViewerClient({ url }: Props) {
       if (!window.pdfjsLib) return
       setLoading(true)
       try {
-        console.log('Loading PDF from URL:', url)
         const loadingTask = window.pdfjsLib.getDocument({
           url,
           withCredentials: false,
@@ -123,7 +122,6 @@ export default function PdfViewerClient({ url }: Props) {
         })
         const doc = await loadingTask.promise
         if (!cancelled) {
-          console.log('PDF loaded successfully, pages:', doc.numPages)
           setPdf(doc)
           setNumPages(doc.numPages)
           setPageNum(1)
@@ -181,7 +179,6 @@ export default function PdfViewerClient({ url }: Props) {
         }
         
         await page.render(renderContext).promise
-        console.log(`Rendered page ${pageNum}`)
       } catch (error) {
         console.error('Error rendering PDF page:', error)
       }
