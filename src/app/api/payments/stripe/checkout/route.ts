@@ -5,11 +5,16 @@ import { db } from '@/lib/db';
 import { UserRole } from '@prisma/client';
 import Stripe from 'stripe';
 
-// Use a plain API version literal acceptable to the Stripe types
-// Cast apiVersion to any to avoid a strict literal union mismatch with installed Stripe types
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2024-12-18' as any,
-});
+// Lazy-initialize Stripe to avoid build-time errors when STRIPE_SECRET_KEY is not set
+function getStripe(): Stripe {
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  if (!secretKey) {
+    throw new Error('STRIPE_SECRET_KEY is not configured');
+  }
+  return new Stripe(secretKey, {
+    apiVersion: '2024-12-18' as any,
+  });
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -35,6 +40,9 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
+
+    // Initialize Stripe
+    const stripe = getStripe();
 
     // Create or get Stripe customer
     let stripeCustomer;
