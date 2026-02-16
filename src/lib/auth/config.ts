@@ -18,55 +18,76 @@ export const authOptions: NextAuthOptions = {
     signIn: "/auth/signin",
     error: "/auth/error",
   },
-  providers: [
-    CredentialsProvider({
-      name: "credentials",
-      credentials: {
-        email: {
-          label: "Email",
-          type: "email",
-          placeholder: "example@example.com",
-        },
-        password: { label: "Password", type: "password" },
-      },
-      async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
-          return null;
-        }
-
-        const user = await db.user.findUnique({
-          where: {
-            email: credentials.email,
+  providers: (() => {
+    const providers: NextAuthOptions["providers"] = [
+      CredentialsProvider({
+        name: "credentials",
+        credentials: {
+          email: {
+            label: "Email",
+            type: "email",
+            placeholder: "example@example.com",
           },
-        });
-
-        if (!user) {
-          return null;
-        }
-
-        // Handle OTP authentication (special case)
-  if (credentials.password === 'otp-auth') {
-          // OTP sign-in is allowed ONLY when preceded by a successful /api/auth/verify-otp call
-          // which issues a short-lived one-time login token stored in Redis.
-          const tokenFromClient = String((credentials as any).otpLoginToken || "");
-          if (!tokenFromClient) return null;
-
-          const loginKey = `otp:login_token:${credentials.email.toLowerCase()}`;
-          const tokenFromRedis = await redis.get(loginKey);
-          if (!tokenFromRedis) return null;
-
-          // constant-time compare
-          try {
-            const a = Buffer.from(tokenFromRedis);
-            const b = Buffer.from(tokenFromClient);
-            if (a.length !== b.length) return null;
-            if (!timingSafeEqual(a, b)) return null;
-          } catch {
+          password: { label: "Password", type: "password" },
+        },
+        async authorize(credentials) {
+          if (!credentials?.email || !credentials?.password) {
             return null;
           }
 
-          // one-time use
-          await redis.del(loginKey);
+          const user = await db.user.findUnique({
+            where: {
+              email: credentials.email,
+            },
+          });
+
+          if (!user) {
+            return null;
+          }
+
+          // Handle OTP authentication (special case)
+    if (credentials.password === 'otp-auth') {
+            // OTP sign-in is allowed ONLY when preceded by a successful /api/auth/verify-otp call
+            // which issues a short-lived one-time login token stored in Redis.
+            const tokenFromClient = String((credentials as any).otpLoginToken || "");
+            if (!tokenFromClient) return null;
+
+            const loginKey = `otp:login_token:${credentials.email.toLowerCase()}`;
+            const tokenFromRedis = await redis.get(loginKey);
+            if (!tokenFromRedis) return null;
+
+            // constant-time compare
+            try {
+              const a = Buffer.from(tokenFromRedis);
+              const b = Buffer.from(tokenFromClient);
+              if (a.length !== b.length) return null;
+              if (!timingSafeEqual(a, b)) return null;
+            } catch {
+              return null;
+            }
+
+            // one-time use
+            await redis.del(loginKey);
+
+            return {
+              id: user.id,
+              email: user.email,
+              name: user.name,
+              role: user.role,
+              avatar: user.avatar ?? undefined,
+              premiumExpires: user.premiumExpires ?? undefined,
+            } as any;
+          }
+
+          // Regular password authentication
+          const isPasswordValid = await bcrypt.compare(
+            credentials.password,
+            user.password || ""
+          );
+
+          if (!isPasswordValid) {
+            return null;
+          }
 
           return {
             id: user.id,
@@ -76,37 +97,32 @@ export const authOptions: NextAuthOptions = {
             avatar: user.avatar ?? undefined,
             premiumExpires: user.premiumExpires ?? undefined,
           } as any;
-        }
+        },
+      }),
+    ];
 
-        // Regular password authentication
-        const isPasswordValid = await bcrypt.compare(
-          credentials.password,
-          user.password || ""
-        );
+    // Conditionally add OAuth providers only if credentials are configured
+    // This prevents build-time errors when OAuth env vars are not set
+    if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+      providers.push(
+        GoogleProvider({
+          clientId: process.env.GOOGLE_CLIENT_ID,
+          clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        })
+      );
+    }
 
-        if (!isPasswordValid) {
-          return null;
-        }
+    if (process.env.GITHUB_ID && process.env.GITHUB_SECRET) {
+      providers.push(
+        GitHubProvider({
+          clientId: process.env.GITHUB_ID,
+          clientSecret: process.env.GITHUB_SECRET,
+        })
+      );
+    }
 
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          avatar: user.avatar ?? undefined,
-          premiumExpires: user.premiumExpires ?? undefined,
-        } as any;
-      },
-    }),
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-    }),
-    GitHubProvider({
-      clientId: process.env.GITHUB_ID!,
-      clientSecret: process.env.GITHUB_SECRET!,
-    }),
-  ],
+    return providers;
+  })(),
   events: {
     async createUser({ user }) {
       const emailVerified = (user as any).emailVerified;
