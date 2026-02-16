@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { notFound } from "next/navigation";
 import { ArticleCard, type Article } from "@/components/blog/article-card";
 import { Badge } from "@/components/ui/badge";
@@ -8,90 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Search, ArrowLeft, Grid, List, Hash } from "lucide-react";
 import Link from "next/link";
-
-// Sample data - in a real app, this would come from an API
-const sampleArticles: Article[] = [
-  {
-    id: "1",
-    title: "The Future of AI: How Machine Learning is Transforming Industries",
-    excerpt: "Artificial Intelligence and Machine Learning are revolutionizing the way businesses operate across various sectors. From healthcare to finance, discover the latest trends and applications.",
-    content: "Full article content here...",
-    author: {
-      name: "Sarah Johnson",
-      avatar: "/avatars/sarah.jpg",
-    },
-    publishedAt: "2024-01-15T10:00:00Z",
-    updatedAt: "2024-01-15T10:00:00Z",
-    category: "AI & Machine Learning",
-    tags: ["AI", "Machine Learning", "Technology", "Innovation"],
-    readTime: 8,
-    likes: 234,
-    comments: 45,
-    featured: true,
-    trending: true,
-    coverImage: "/images/ai-future.jpg",
-  },
-  {
-    id: "2",
-    title: "Building Scalable Web Applications with Next.js 15",
-    excerpt: "Learn how to leverage the latest features in Next.js 15 to build high-performance, scalable web applications. Explore the App Router, server components, and more.",
-    content: "Full article content here...",
-    author: {
-      name: "Mike Chen",
-      avatar: "/avatars/mike.jpg",
-    },
-    publishedAt: "2024-01-14T14:30:00Z",
-    updatedAt: "2024-01-14T14:30:00Z",
-    category: "Web Development",
-    tags: ["Next.js", "React", "Web Development", "JavaScript"],
-    readTime: 12,
-    likes: 189,
-    comments: 32,
-    featured: true,
-    trending: false,
-    coverImage: "/images/nextjs-15.jpg",
-  },
-  {
-    id: "3",
-    title: "Crypto Market Analysis: Bitcoin's Journey to New Heights",
-    excerpt: "An in-depth analysis of Bitcoin's recent performance and the factors driving the cryptocurrency market. Expert insights on what to expect in the coming months.",
-    content: "Full article content here...",
-    author: {
-      name: "Alex Rodriguez",
-      avatar: "/avatars/alex.jpg",
-    },
-    publishedAt: "2024-01-13T09:15:00Z",
-    updatedAt: "2024-01-13T09:15:00Z",
-    category: "Crypto",
-    tags: ["Bitcoin", "Cryptocurrency", "Finance", "Trading"],
-    readTime: 6,
-    likes: 156,
-    comments: 28,
-    featured: false,
-    trending: true,
-    coverImage: "/images/crypto-analysis.jpg",
-  },
-  {
-    id: "6",
-    title: "Web3 and the Future of Decentralized Applications",
-    excerpt: "Explore the world of Web3 and decentralized applications. Learn about blockchain technology, smart contracts, and the potential impact on the internet.",
-    content: "Full article content here...",
-    author: {
-      name: "Lisa Wang",
-      avatar: "/avatars/lisa.jpg",
-    },
-    publishedAt: "2024-01-10T13:55:00Z",
-    updatedAt: "2024-01-10T13:55:00Z",
-    category: "Web Development",
-    tags: ["Web3", "Blockchain", "Decentralization", "Smart Contracts"],
-    readTime: 9,
-    likes: 178,
-    comments: 41,
-    featured: false,
-    trending: true,
-    coverImage: "/images/web3-future.jpg",
-  },
-];
 
 interface TagPageProps {
   params: any;
@@ -103,18 +19,53 @@ export default function TagPage({ params, searchParams }: TagPageProps) {
   const [searchQuery, setSearchQuery] = useState(searchParams.search || "");
   const [sortBy, setSortBy] = useState<"latest" | "trending" | "popular">(searchParams.sort || "latest");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [articles, setArticles] = useState<Article[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const filteredArticles = sampleArticles.filter(article => {
-    const matchesTag = article.tags.some(tag => 
-      tag.toLowerCase() === tagName.toLowerCase()
-    );
-    const matchesSearch = !searchQuery || 
-      article.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      article.excerpt.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesTag && matchesSearch;
-  });
+  // Fetch articles by tag from API
+  useEffect(() => {
+    const fetchArticles = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const apiParams = new URLSearchParams();
+        apiParams.set("tag", params?.slug ?? '');
+        if (searchQuery) apiParams.set("search", searchQuery);
+        apiParams.set("limit", "100");
 
-  const sortedArticles = [...filteredArticles].sort((a, b) => {
+        const response = await fetch(`/api/articles?${apiParams.toString()}`);
+        if (!response.ok) throw new Error("Failed to fetch articles");
+        
+        const data = await response.json();
+        let fetchedArticles = data.articles || [];
+
+        // Filter by tag name (client-side since API uses slug)
+        fetchedArticles = fetchedArticles.filter((article: Article) =>
+          article.tags.some(tag => tag.toLowerCase() === tagName.toLowerCase())
+        );
+
+        // Additional client-side search filtering
+        if (searchQuery) {
+          fetchedArticles = fetchedArticles.filter((article: Article) =>
+            article.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            article.excerpt.toLowerCase().includes(searchQuery.toLowerCase())
+          );
+        }
+
+        setArticles(fetchedArticles);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load articles");
+        setArticles([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchArticles();
+  }, [params?.slug, tagName, searchQuery]);
+
+  const sortedArticles = [...articles].sort((a, b) => {
     switch (sortBy) {
       case "trending":
         return b.trending === a.trending ? 0 : b.trending ? 1 : -1;
@@ -126,16 +77,16 @@ export default function TagPage({ params, searchParams }: TagPageProps) {
   });
 
   const tagStats = {
-    totalArticles: filteredArticles.length,
-    totalReads: filteredArticles.reduce((sum, article) => sum + article.likes, 0),
-    totalComments: filteredArticles.reduce((sum, article) => sum + article.comments, 0),
+    totalArticles: articles.length,
+    totalReads: articles.reduce((sum, article) => sum + article.likes, 0),
+    totalComments: articles.reduce((sum, article) => sum + article.comments, 0),
     categories: Array.from(
-      new Set(filteredArticles.map(article => article.category))
+      new Set(articles.map(article => article.category))
     ),
   };
 
   // If no articles found for this tag, return 404
-  if (filteredArticles.length === 0) {
+  if (!loading && articles.length === 0) {
     notFound();
   }
 
@@ -221,7 +172,7 @@ export default function TagPage({ params, searchParams }: TagPageProps) {
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
               <div className="flex items-center gap-4">
                 <span className="text-sm text-muted-foreground">
-                  {filteredArticles.length} article{filteredArticles.length !== 1 ? 's' : ''} found
+                  {loading ? "Loading..." : `${articles.length} article${articles.length !== 1 ? 's' : ''} found`}
                 </span>
                 
                 {/* Sort Dropdown */}
@@ -257,7 +208,16 @@ export default function TagPage({ params, searchParams }: TagPageProps) {
           </div>
 
           {/* Articles Grid */}
-          {sortedArticles.length > 0 ? (
+          {loading ? (
+            <div className="text-center py-12">
+              <p className="text-muted-foreground">Loading articles...</p>
+            </div>
+          ) : error ? (
+            <div className="text-center py-12">
+              <p className="text-destructive mb-4">{error}</p>
+              <Button onClick={() => window.location.reload()}>Retry</Button>
+            </div>
+          ) : sortedArticles.length > 0 ? (
             <div className={
               viewMode === "grid" 
                 ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
