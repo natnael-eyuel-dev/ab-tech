@@ -2,7 +2,7 @@
 
 An end-to-end example of how to build and run a modern content business for an AI/ML/Data Science audience: publish editorial content, manage it in an admin CMS, and monetize with subscriptions and paywalled access.
 
-At a glance: **Next.js 15 + Prisma/Postgres (Supabase) + Upstash Redis + Stripe/Telebirr + Cloudinary**.
+At a glance: **Next.js 16 + Prisma/Postgres (Supabase) + Upstash Redis + Stripe/Telebirr + Cloudinary**.
 
 ### What problem it solves
 Content products often stall between “nice UI” and “real business”: authentication, editorial workflows, paywalls, subscriptions, media hosting, and operational glue. AB TECH is a reference implementation that brings these pieces together into a single Next.js app.
@@ -16,7 +16,7 @@ Content products often stall between “nice UI” and “real business”: auth
 - **Realtime (optional)**: Socket.IO server with origin allowlist (custom server).
 
 ### Tech stack
-- **Frontend**: Next.js 15 (App Router), React 19, Tailwind CSS, shadcn/ui
+- **Frontend**: Next.js 16 (App Router), React 19, Tailwind CSS, shadcn/ui
 - **Backend**: Next.js Route Handlers, NextAuth
 - **Data**: Prisma + PostgreSQL (Supabase recommended)
 - **Cache/rate limits**: Upstash Redis
