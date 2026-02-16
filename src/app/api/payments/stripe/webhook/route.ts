@@ -4,12 +4,28 @@ import { UserRole } from '@prisma/client';
 import { grantPremiumAccess, extendPremiumAccess } from '@/lib/utils/premium';
 import Stripe from 'stripe';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+// Lazy-initialize Stripe to avoid build-time errors when STRIPE_SECRET_KEY is not set
+function getStripe(): Stripe {
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  if (!secretKey) {
+    throw new Error('STRIPE_SECRET_KEY is not configured');
+  }
+  return new Stripe(secretKey);
+}
 
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
+function getWebhookSecret(): string {
+  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!secret) {
+    throw new Error('STRIPE_WEBHOOK_SECRET is not configured');
+  }
+  return secret;
+}
 
 export async function POST(request: NextRequest) {
   try {
+    const stripe = getStripe();
+    const webhookSecret = getWebhookSecret();
+    
     const body = await request.text();
     const signature = request.headers.get('stripe-signature')!;
 
@@ -105,6 +121,7 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
 
 async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
   try {
+    const stripe = getStripe();
     const invoiceSubscription = (invoice as any).subscription;
     if (!invoiceSubscription) {
       return;
@@ -153,6 +170,7 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
 
 async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
   try {
+    const stripe = getStripe();
     const invoiceSubscription = (invoice as any).subscription;
     if (!invoiceSubscription) {
       return;
